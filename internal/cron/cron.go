@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"abp/internal/config"
+	"github.com/projector22/abp/internal/config"
 )
 
 const tag = "# abp:"

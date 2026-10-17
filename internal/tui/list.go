@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"abp/internal/config"
-	"abp/internal/cron"
+	"github.com/projector22/abp/internal/config"
+	"github.com/projector22/abp/internal/cron"
 )
 
 type listScreen struct {

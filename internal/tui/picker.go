@@ -9,8 +9,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"abp/internal/abp"
-	"abp/internal/config"
+	"github.com/projector22/abp/internal/abp"
+	"github.com/projector22/abp/internal/config"
 )
 
 type podcastsLoadedMsg struct {

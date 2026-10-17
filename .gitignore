@@ -61,3 +61,5 @@ config.json
 abd
 coverage.html
 coverage.out
+
+notes.md

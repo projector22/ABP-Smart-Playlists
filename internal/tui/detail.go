@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"abp/internal/cron"
+	"github.com/projector22/abp/internal/cron"
 )
 
 type detailScreen struct {

@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"abp/internal/abp"
-	"abp/internal/config"
-	"abp/internal/cron"
-	"abp/internal/engine"
-	"abp/internal/tui"
+	"github.com/projector22/abp/internal/abp"
+	"github.com/projector22/abp/internal/config"
+	"github.com/projector22/abp/internal/cron"
+	"github.com/projector22/abp/internal/engine"
+	"github.com/projector22/abp/internal/tui"
 )
 
 var version = "dev"

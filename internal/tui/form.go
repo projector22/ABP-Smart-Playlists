@@ -9,9 +9,9 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"abp/internal/abp"
-	"abp/internal/config"
-	"abp/internal/cron"
+	"github.com/projector22/abp/internal/abp"
+	"github.com/projector22/abp/internal/config"
+	"github.com/projector22/abp/internal/cron"
 )
 
 type librariesLoadedMsg struct {

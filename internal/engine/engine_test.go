@@ -12,8 +12,8 @@ import (
 	"sync"
 	"testing"
 
-	"abp/internal/abp"
-	"abp/internal/config"
+	"github.com/projector22/abp/internal/abp"
+	"github.com/projector22/abp/internal/config"
 )
 
 // fakeABS reproduces the real Audiobookshelf playlist semantics (read from its

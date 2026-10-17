@@ -5,8 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"abp/internal/abp"
-	"abp/internal/config"
+	"github.com/projector22/abp/internal/abp"
+	"github.com/projector22/abp/internal/config"
 )
 
 // TestRenderAllScreens is a smoke test: it draws every screen at a normal and at

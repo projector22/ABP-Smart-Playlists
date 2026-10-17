@@ -8,7 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"abp/internal/engine"
+	"github.com/projector22/abp/internal/engine"
 )
 
 type previewMsg struct {

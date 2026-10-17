@@ -11,10 +11,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"abp/internal/abp"
-	"abp/internal/config"
-	"abp/internal/cron"
-	"abp/internal/engine"
+	"github.com/projector22/abp/internal/abp"
+	"github.com/projector22/abp/internal/config"
+	"github.com/projector22/abp/internal/cron"
+	"github.com/projector22/abp/internal/engine"
 )
 
 // app is shared, mutable state that every screen can reach.

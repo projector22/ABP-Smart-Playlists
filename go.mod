@@ -1,4 +1,4 @@
-module abp
+module github.com/projector22/abp
 
 go 1.22
 

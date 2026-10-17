@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"abp/internal/abp"
-	"abp/internal/config"
+	"github.com/projector22/abp/internal/abp"
+	"github.com/projector22/abp/internal/config"
 )
 
 type Item struct {
