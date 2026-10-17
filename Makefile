@@ -9,6 +9,15 @@ PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 
 GO       ?= go
 
+# macOS 26+ refuses to run executables that have no LC_UUID load command. Go's
+# internal linker omits it for test binaries that pull in cgo (anything that
+# imports net, which includes the engine and tui tests), so on macOS the tests
+# are linked externally with clang instead. Both are no-ops elsewhere.
+ifeq ($(shell uname -s),Darwin)
+TEST_ENV   := CGO_ENABLED=1
+TEST_FLAGS := -ldflags=-linkmode=external
+endif
+
 .DEFAULT_GOAL := help
 
 .PHONY: help
@@ -56,15 +65,15 @@ dist: ## Cross-compile release tarballs into ./dist
 
 .PHONY: test
 test: ## Run unit tests
-	$(GO) test $(PKG)
+	$(TEST_ENV) $(GO) test $(TEST_FLAGS) $(PKG)
 
 .PHONY: test-race
 test-race: ## Run tests with the race detector
-	$(GO) test -race $(PKG)
+	$(TEST_ENV) $(GO) test -race $(TEST_FLAGS) $(PKG)
 
 .PHONY: cover
 cover: ## Run tests and write coverage.html
-	$(GO) test -coverprofile=coverage.out $(PKG)
+	$(TEST_ENV) $(GO) test $(TEST_FLAGS) -coverprofile=coverage.out $(PKG)
 	$(GO) tool cover -html=coverage.out -o coverage.html
 	@$(GO) tool cover -func=coverage.out | tail -1
 
