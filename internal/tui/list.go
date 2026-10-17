@@ -143,17 +143,18 @@ func (s *listScreen) View(w, h int) string {
 	const (
 		wSize  = 9
 		wPods  = 10
-		wSched = 24
+		wSched = 22
 		wSync  = 18
+		wRun   = 18
 	)
-	wName := w - 2 - wSize - wPods - wSched - wSync
+	wName := w - 2 - wSize - wPods - wSched - wSync - wRun
 	if wName < 12 {
 		wName = 12
 	}
 
 	var b strings.Builder
 	b.WriteString("\n")
-	b.WriteString("  " + sColHdr.Render(cell("PLAYLIST", wName)+cell("SIZE", wSize)+cell("PODCASTS", wPods)+cell("SCHEDULE", wSched)+"LAST SYNC") + "\n")
+	b.WriteString("  " + sColHdr.Render(cell("PLAYLIST", wName)+cell("SIZE", wSize)+cell("PODCASTS", wPods)+cell("SCHEDULE", wSched)+cell("LAST SYNC", wSync)+"LAST RUN") + "\n")
 
 	avail := h - 4
 	if s.confirm != nil {
@@ -173,7 +174,7 @@ func (s *listScreen) View(w, h int) string {
 		b.WriteString(cursor + name +
 			sText.Render(cell(fmt.Sprintf("%d eps", p.Limit), wSize)) +
 			sText.Render(cell(fmt.Sprintf("%d", len(p.Podcasts)), wPods)) +
-			sched + syncBadge(st) + "\n")
+			sched + cell0(syncBadge(st), wSync) + runBadge(s.a, p, st) + "\n")
 	}
 	if len(pls) > end-start {
 		b.WriteString(sMuted.Render(fmt.Sprintf("\n  showing %d–%d of %d", start+1, end, len(pls))) + "\n")
@@ -181,10 +182,13 @@ func (s *listScreen) View(w, h int) string {
 	if s.cur < len(pls) {
 		sel := pls[s.cur]
 		st := s.a.state.Get(sel.ID)
+		if sel.Schedule != "" && st.ScheduledError != "" {
+			b.WriteString("\n" + sErr.Render("  scheduled run failed: "+trunc(st.ScheduledError, w-26)) + "\n")
+		}
 		if st.Error != "" {
 			b.WriteString("\n" + sErr.Render("  "+trunc(st.Error, w-4)) + "\n")
 		} else if st.Summary != "" {
-			b.WriteString("\n" + sMuted.Render("  last result: "+st.Summary) + "\n")
+			b.WriteString("\n" + sMuted.Render("  last sync: "+st.Summary) + "\n")
 		}
 	}
 	if s.a.cronErr != nil {
@@ -194,4 +198,29 @@ func (s *listScreen) View(w, h int) string {
 		b.WriteString("\n" + s.confirm.view())
 	}
 	return b.String()
+}
+
+// runBadge renders the "last run" column: how the most recent run started by
+// the crontab went. It is blank ("—") for playlists with no schedule. A
+// schedule that has never run says why it might not have: not yet, or because
+// it isn't installed in the crontab at all.
+func runBadge(a *app, p config.Playlist, st config.PlaylistState) string {
+	switch {
+	case p.Schedule == "":
+		return sMuted.Render("—")
+	case st.ScheduledError != "":
+		return sErr.Render("✗ failed " + ago(st.LastScheduled))
+	case !st.LastScheduled.IsZero():
+		return sOK.Render("✓ ") + sMuted.Render(ago(st.LastScheduled))
+	case a.managed[p.ID] != p.Schedule:
+		return sWarn.Render("not installed")
+	default:
+		return sMuted.Render("not run yet")
+	}
+}
+
+// cell0 pads an already-styled string with spaces to n display columns. (cell
+// is for plain text: it truncates, which would miscount colour codes.)
+func cell0(s string, n int) string {
+	return s + strings.Repeat(" ", max(0, n-visibleWidth(s)))
 }

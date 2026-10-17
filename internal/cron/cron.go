@@ -274,7 +274,7 @@ func Sync(cfg *config.Config) error {
 		if err := Validate(p.Schedule); err != nil {
 			return fmt.Errorf("playlist %q: %w", p.ID, err)
 		}
-		out = append(out, fmt.Sprintf("%s %s%s sync %s >> %s 2>&1 %s%s",
+		out = append(out, fmt.Sprintf("%s %s%s sync -scheduled %s >> %s 2>&1 %s%s",
 			p.Schedule, envPrefix, shq(exePath()), p.ID, shq(config.LogPath()), tag, p.ID))
 	}
 	// Avoid rewriting the crontab when nothing changed.

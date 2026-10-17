@@ -429,26 +429,34 @@ func (a *app) versionCmd() tea.Cmd {
 }
 
 // headerRight renders the right-hand side of the header, in at most max columns:
-// an "update available" notice, this build's version, and the server. Parts are
-// dropped from the left-most (least important) end until it fits.
+// an "update available" notice, this build's version, and the server. If it does
+// not all fit, parts are dropped, least important first (the server, then the
+// update notice). Any part may be absent: before the first connection there is
+// no server, and most of the time there is no update.
 func (r *root) headerRight(max int) string {
 	host := strings.TrimPrefix(strings.TrimPrefix(r.a.creds.URL, "https://"), "http://")
+
+	var upd, srv string
+	if r.a.update.Status == version.UpdateAvailable {
+		upd = sWarn.Render("↑ " + r.a.update.Latest + " available")
+	}
+	if host != "" {
+		srv = sMuted.Render(trunc(host, 30))
+	}
 	ver := sMuted.Render(r.a.build.Short())
 
-	var parts []string
-	if r.a.update.Status == version.UpdateAvailable {
-		parts = append(parts, sWarn.Render("↑ "+r.a.update.Latest+" available"))
+	join := func(parts ...string) string {
+		var keep []string
+		for _, p := range parts {
+			if p != "" {
+				keep = append(keep, p)
+			}
+		}
+		return strings.Join(keep, sMuted.Render("  ·  "))
 	}
-	parts = append(parts, ver)
-	if host != "" {
-		parts = append(parts, sMuted.Render(trunc(host, 30)))
-	}
-
-	// Try everything, then drop the server, then the update notice.
-	for _, cand := range [][]string{parts, parts[:len(parts)-1], parts[len(parts)-2:], {ver}} {
-		s := strings.Join(cand, sMuted.Render("  ·  "))
-		if lipgloss.Width(s) <= max {
-			return s
+	for _, cand := range []string{join(upd, ver, srv), join(upd, ver), join(ver, srv), ver} {
+		if lipgloss.Width(cand) <= max {
+			return cand
 		}
 	}
 	return ""

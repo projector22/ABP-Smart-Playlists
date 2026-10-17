@@ -98,6 +98,12 @@ type PlaylistState struct {
 	LastSync time.Time `json:"last_sync,omitempty"`
 	Summary  string    `json:"summary,omitempty"`
 	Error    string    `json:"error,omitempty"`
+
+	// The most recent run started by the crontab (as opposed to a manual sync),
+	// kept separately so the UI can show whether the schedule is really working.
+	LastScheduled    time.Time `json:"last_scheduled,omitempty"`
+	ScheduledSummary string    `json:"scheduled_summary,omitempty"`
+	ScheduledError   string    `json:"scheduled_error,omitempty"`
 }
 
 type State struct {
@@ -150,4 +156,19 @@ func (s *State) Forget(id string) {
 	defer s.mu.Unlock()
 	delete(s.Playlists, id)
 	_ = writePrivate(StatePath(), s)
+}
+
+// RecordScheduled stores the outcome of a run that was started by the crontab
+// (as opposed to a sync started by hand): when it happened, and either its
+// summary or the error that made it fail. A new record replaces the previous one.
+func (s *State) RecordScheduled(id, summary string, err error) {
+	s.Update(id, func(p *PlaylistState) {
+		p.LastScheduled = time.Now()
+		p.ScheduledSummary, p.ScheduledError = "", ""
+		if err != nil {
+			p.ScheduledError = err.Error()
+		} else {
+			p.ScheduledSummary = summary
+		}
+	})
 }
