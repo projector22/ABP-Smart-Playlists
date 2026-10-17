@@ -36,6 +36,7 @@ Usage:
 Flags for sync:
   -n, -dry-run   show what would change without touching Audiobookshelf
   -all           sync every playlist
+  -scheduled     record this as a scheduled run (used by the crontab entries abp writes)
 
 Config:       ` + "%s" + `
 Credentials:  ` + "%s" + ` (private, mode 0600)
@@ -89,6 +90,9 @@ func cmdSync(args []string) int {
 	dry := fs.Bool("dry-run", false, "")
 	fs.BoolVar(dry, "n", false, "")
 	all := fs.Bool("all", false, "")
+	// -scheduled is added to the crontab entries abp writes. It makes the run be
+	// recorded as a scheduled run, which the TUI shows in its "last run" column.
+	scheduled := fs.Bool("scheduled", false, "")
 	_ = fs.Parse(args)
 
 	cfg, err := config.Load()
@@ -129,6 +133,13 @@ func cmdSync(args []string) int {
 		tctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 		res, err := engine.Run(tctx, client, pl, state, *dry)
 		cancel()
+		if *scheduled && !*dry {
+			summary := ""
+			if err == nil {
+				summary = res.Summary()
+			}
+			state.RecordScheduled(pl.ID, summary, err)
+		}
 		if err != nil {
 			failed++
 			fmt.Printf("%s %s: ERROR %v\n", stamp(), pl.ID, err)

@@ -147,6 +147,20 @@ func (s *detailScreen) View(w, h int) string {
 		last = sOK.Render("✓ ") + sText.Render(ago(st.LastSync)) + sMuted.Render(" — "+st.Summary)
 	}
 
+	// Outcome of the most recent run started by the crontab (only if scheduled).
+	var lastRun string
+	switch {
+	case pl.Schedule == "":
+	case st.ScheduledError != "":
+		lastRun = sErr.Render("✗ " + trunc(st.ScheduledError, w-14))
+	case !st.LastScheduled.IsZero():
+		lastRun = sOK.Render("✓ ") + sText.Render(ago(st.LastScheduled)) + sMuted.Render(" — "+st.ScheduledSummary)
+	case s.a.managed[pl.ID] != pl.Schedule:
+		lastRun = sWarn.Render("not installed in the crontab yet")
+	default:
+		lastRun = sMuted.Render("not run yet")
+	}
+
 	var b strings.Builder
 	b.WriteString("\n" + sTitle.Render(pl.Name) + "\n\n")
 	if pl.Description != "" {
@@ -155,7 +169,11 @@ func (s *detailScreen) View(w, h int) string {
 	b.WriteString(label("Library") + sText.Render(lib) + "\n")
 	b.WriteString(label("Size") + sText.Render(fmt.Sprintf("up to %d unfinished episodes, oldest first", pl.Limit)) + "\n")
 	b.WriteString(label("Schedule") + sched + "\n")
-	b.WriteString(label("Last sync") + last + "\n\n")
+	b.WriteString(label("Last sync") + last + "\n")
+	if lastRun != "" {
+		b.WriteString(label("Last run") + lastRun + "\n")
+	}
+	b.WriteString("\n")
 
 	b.WriteString(sColHdr.Render(fmt.Sprintf("PODCASTS (%d)", len(pl.Podcasts))) + "\n")
 	if len(pl.Podcasts) == 0 {
@@ -164,6 +182,9 @@ func (s *detailScreen) View(w, h int) string {
 	s.cur = clamp(s.cur, 0, len(pl.Podcasts)-1)
 	avail := h - 11
 	if pl.Description != "" {
+		avail--
+	}
+	if lastRun != "" {
 		avail--
 	}
 	if s.confirm != nil {
