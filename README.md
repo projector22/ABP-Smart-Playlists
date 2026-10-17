@@ -1,6 +1,6 @@
 # ABP Smart Playlists
 
-[![CI](https://github.com/projector22/abp/actions/workflows/ci.yml/badge.svg)](https://github.com/projector22/abp/actions/workflows/ci.yml)
+[![CI](https://github.com/projector22/ABP-Smart-Playlists/actions/workflows/ci.yml/badge.svg)](https://github.com/projector22/ABP-Smart-Playlists/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 
 Ever wanted a playlist of podcasts, ordered from oldest to newest, to be listened to in that order? That's what I wanted, so I created this tool.
