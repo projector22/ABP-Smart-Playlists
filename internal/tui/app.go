@@ -84,6 +84,17 @@ type (
 	}
 	syncAllDoneMsg struct{ ok, failed int }
 
+	// refreshTickMsg fires every refreshEvery while the TUI is open. It makes the
+	// screens pick up changes made by other abp processes (cron runs) and keeps
+	// relative times such as "12m ago" current.
+	refreshTickMsg struct{}
+
+	// cronRefreshedMsg carries a fresh reading of abp's crontab entries.
+	cronRefreshedMsg struct {
+		managed map[string]string
+		err     error
+	}
+
 	// updateMsg carries the result of an update check. manual is true when the
 	// user asked for it (v key), in which case the answer is also shown in the
 	// status line.
@@ -245,6 +256,31 @@ type root struct {
 	status statusMsg
 	busy   string
 	spin   spinner.Model
+
+	spinning bool // a spinner tick is in flight (ticks only run while busy)
+	ticks    int  // refresh ticks seen so far
+}
+
+// refreshEvery is how often an open TUI re-reads the state file and redraws.
+const refreshEvery = 5 * time.Second
+
+// cronEvery is how many refresh ticks pass between re-reads of the crontab,
+// which is a (slightly) more expensive shell-out than reading a small file.
+const cronEvery = 6
+
+// refreshTick returns a command that delivers the next refreshTickMsg after
+// refreshEvery. Each tick handler schedules the following one, so the refresh
+// loop keeps running for as long as the TUI is open.
+func refreshTick() tea.Cmd {
+	return tea.Tick(refreshEvery, func(time.Time) tea.Msg { return refreshTickMsg{} })
+}
+
+// refreshCronCmd re-reads the crontab in the background.
+func refreshCronCmd() tea.Cmd {
+	return func() tea.Msg {
+		m, err := cron.Managed()
+		return cronRefreshedMsg{managed: m, err: err}
+	}
 }
 
 // newRoot creates the root model with first as the initial screen and sets up
@@ -263,7 +299,8 @@ func (r *root) top() screen { return r.stack[len(r.stack)-1] }
 func (r *root) Init() tea.Cmd {
 	// The update check runs in the background so start-up is never delayed; the
 	// header shows its answer when it arrives (usually from the daily cache).
-	return tea.Batch(r.top().Init(), r.spin.Tick, r.a.checkUpdateCmd(version.CacheTTL, false))
+	// (The spinner is not started here: it only animates while something is busy.)
+	return tea.Batch(r.top().Init(), refreshTick(), r.a.checkUpdateCmd(version.CacheTTL, false))
 }
 
 // Update is the Bubble Tea update function for the whole program. It handles
@@ -281,9 +318,28 @@ func (r *root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		r.status = statusMsg{}
 	case spinner.TickMsg:
+		// Keep animating only while busy; otherwise let the tick chain end so an idle
+		// TUI does not redraw ten times a second for nothing.
+		if r.busy == "" {
+			r.spinning = false
+			return r, nil
+		}
 		var cmd tea.Cmd
 		r.spin, cmd = r.spin.Update(m)
 		return r, cmd
+	case refreshTickMsg:
+		// Pick up anything other abp processes (cron runs) have written. Merely
+		// handling this message makes Bubble Tea redraw, which also refreshes the
+		// "12m ago" style ages.
+		r.a.state.Reload()
+		r.ticks++
+		if r.ticks%cronEvery == 0 {
+			return r, tea.Batch(refreshTick(), refreshCronCmd())
+		}
+		return r, refreshTick()
+	case cronRefreshedMsg:
+		r.a.managed, r.a.cronErr = m.managed, m.err
+		return r, nil
 	case pushMsg:
 		r.stack = append(r.stack, m.s)
 		return r, m.s.Init()
@@ -300,6 +356,10 @@ func (r *root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return r, nil
 	case busyMsg:
 		r.busy = m.text
+		if m.text != "" && !r.spinning {
+			r.spinning = true
+			return r, r.spin.Tick // start the animation
+		}
 		return r, nil
 	case updateMsg:
 		r.a.update = m.res

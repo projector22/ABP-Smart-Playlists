@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -182,5 +183,70 @@ func TestHeaderBeforeFirstConnection(t *testing.T) {
 		if r.View() == "" {
 			t.Fatalf("empty view at width %d", w)
 		}
+	}
+}
+
+// TestListRefreshesWhenCronWritesState is the "leave abp open" scenario: a cron
+// run (another process, here a second State on the same file) records a
+// result, and the open TUI shows it after its next refresh tick without any key
+// being pressed.
+func TestListRefreshesWhenCronWritesState(t *testing.T) {
+	t.Setenv("ABP_DATA_DIR", t.TempDir())
+	a := &app{
+		cfg:      &config.Config{Playlists: []config.Playlist{{ID: "hist", Name: "History", Limit: 5, Schedule: "0 * * * *"}}},
+		state:    config.LoadState(),
+		podcasts: map[string][]abp.LibraryItem{},
+		managed:  map[string]string{"hist": "0 * * * *"},
+	}
+	r := newRoot(a, newList(a))
+	r.Update(tea.WindowSizeMsg{Width: 130, Height: 20})
+	if out := r.View(); !strings.Contains(out, "not run yet") {
+		t.Fatalf("before the cron run:\n%s", out)
+	}
+
+	cron := config.LoadState() // "abp sync -scheduled hist", running elsewhere
+	cron.RecordScheduled("hist", "updated · 5 items", nil)
+
+	_, cmd := r.Update(refreshTickMsg{})
+	out := r.View()
+	if strings.Contains(out, "not run yet") || !strings.Contains(out, "✓") {
+		t.Fatalf("the cron run should be visible after a refresh tick:\n%s", out)
+	}
+	if cmd == nil {
+		t.Fatal("a refresh tick must schedule the next one")
+	}
+
+	// A failure written later also shows up.
+	cron.RecordScheduled("hist", "", errors.New("connection refused"))
+	r.Update(refreshTickMsg{})
+	if out = r.View(); !strings.Contains(out, "✗ failed") {
+		t.Fatalf("failed run not shown after refresh:\n%s", out)
+	}
+}
+
+// TestSpinnerOnlyRunsWhileBusy checks an idle TUI is quiet: no spinner ticks
+// are kept alive when nothing is happening, a busy message starts the
+// animation, and the tick chain ends again once the work is done.
+func TestSpinnerOnlyRunsWhileBusy(t *testing.T) {
+	t.Setenv("ABP_DATA_DIR", t.TempDir())
+	a := &app{cfg: &config.Config{}, state: config.LoadState(), podcasts: map[string][]abp.LibraryItem{}, managed: map[string]string{}}
+	r := newRoot(a, newList(a))
+	r.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+
+	if _, cmd := r.Update(spinner.TickMsg{}); cmd != nil {
+		t.Fatal("an idle spinner tick must not schedule another")
+	}
+	if _, cmd := r.Update(busyMsg{"Syncing…"}); cmd == nil {
+		t.Fatal("becoming busy must start the spinner")
+	}
+	if _, cmd := r.Update(busyMsg{"Still syncing…"}); cmd != nil {
+		t.Fatal("already spinning: no second tick chain should be started")
+	}
+	r.Update(busyMsg{""}) // work finished
+	if _, cmd := r.Update(spinner.TickMsg{}); cmd != nil {
+		t.Fatal("the tick chain must end once nothing is busy")
+	}
+	if _, cmd := r.Update(busyMsg{"Again…"}); cmd == nil {
+		t.Fatal("a later busy period must be able to restart the spinner")
 	}
 }
