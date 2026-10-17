@@ -15,6 +15,7 @@ import (
 	"github.com/projector22/abp/internal/config"
 	"github.com/projector22/abp/internal/cron"
 	"github.com/projector22/abp/internal/engine"
+	"github.com/projector22/abp/internal/version"
 )
 
 // app is shared, mutable state that every screen can reach.
@@ -29,6 +30,9 @@ type app struct {
 
 	managed map[string]string // crontab: playlist id -> schedule
 	cronErr error
+
+	build  version.Build  // which abp this is (shown in the header)
+	update version.Result // latest update-check answer; zero value until it arrives
 }
 
 // refreshCron re-reads abp's entries from the crontab and caches the result (and
@@ -79,6 +83,14 @@ type (
 		err  error
 	}
 	syncAllDoneMsg struct{ ok, failed int }
+
+	// updateMsg carries the result of an update check. manual is true when the
+	// user asked for it (v key), in which case the answer is also shown in the
+	// status line.
+	updateMsg struct {
+		res    version.Result
+		manual bool
+	}
 )
 
 // push returns a command that navigates to s, stacking it on top of the current
@@ -249,7 +261,9 @@ func (r *root) top() screen { return r.stack[len(r.stack)-1] }
 
 // Init starts the initial screen and the spinner animation.
 func (r *root) Init() tea.Cmd {
-	return tea.Batch(r.top().Init(), r.spin.Tick)
+	// The update check runs in the background so start-up is never delayed; the
+	// header shows its answer when it arrives (usually from the daily cache).
+	return tea.Batch(r.top().Init(), r.spin.Tick, r.a.checkUpdateCmd(version.CacheTTL, false))
 }
 
 // Update is the Bubble Tea update function for the whole program. It handles
@@ -286,6 +300,13 @@ func (r *root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return r, nil
 	case busyMsg:
 		r.busy = m.text
+		return r, nil
+	case updateMsg:
+		r.a.update = m.res
+		if m.manual {
+			r.busy = ""
+			r.status = statusMsg{text: m.res.Summary(), err: m.res.Err != nil && m.res.Latest == ""}
+		}
 		return r, nil
 	case syncDoneMsg:
 		// A sync finished: stop the spinner and summarise. Warnings (e.g. a podcast
@@ -327,7 +348,7 @@ func (r *root) View() string {
 		crumbs = append(crumbs, s.Title())
 	}
 	left := sBadge.Render("abp") + " " + sCrumb.Render(strings.Join(crumbs, sMuted.Render("  ›  ")))
-	right := sMuted.Render(trunc(strings.TrimPrefix(strings.TrimPrefix(r.a.creds.URL, "https://"), "http://"), r.w/3))
+	right := r.headerRight(r.w - 2 - lipgloss.Width(left) - 2)
 	gap := r.w - 2 - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
 		gap = 1
@@ -343,20 +364,25 @@ func (r *root) View() string {
 	case r.status.text != "":
 		st = sOK.Render("✓ ") + sText.Render(r.status.text)
 	}
-	footer := rule(r.w) + "\n" + pad.Render(trunc(st, r.w-4)) + "\n" + pad.Render(r.top().Help())
+	// The status and key-hint lines can be longer than the terminal. Wrap them
+	// (lipgloss wraps coloured text correctly) rather than truncating, which
+	// would miscount the colour escape codes.
+	footer := rule(r.w) + "\n" + pad.Width(r.w).Render(st) + "\n" + pad.Width(r.w).Render(r.top().Help())
 
 	bodyH := r.h - lipgloss.Height(header) - lipgloss.Height(footer)
 	if bodyH < 1 {
 		bodyH = 1
 	}
 	body := pad.Height(bodyH).Render(r.top().View(r.w-4, bodyH))
-	return lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
+	// Last line of defence: no line may ever be wider than the terminal, or the
+	// terminal wraps it and the whole layout shifts down.
+	return lipgloss.NewStyle().MaxWidth(r.w).Render(lipgloss.JoinVertical(lipgloss.Left, header, body, footer))
 }
 
-// Run starts the interactive TUI. It loads the config and credentials and opens
-// the playlist list, or the connection screen when no credentials exist yet. It
-// blocks until the user quits.
-func Run() error {
+// Run starts the interactive TUI for the given build. It loads the config and
+// credentials and opens the playlist list, or the connection screen when no
+// credentials exist yet. It blocks until the user quits.
+func Run(build version.Build) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -365,7 +391,7 @@ func Run() error {
 	if err != nil {
 		return err
 	}
-	a := &app{cfg: cfg, state: config.LoadState(), podcasts: map[string][]abp.LibraryItem{}}
+	a := &app{cfg: cfg, state: config.LoadState(), podcasts: map[string][]abp.LibraryItem{}, build: build}
 	a.refreshCron()
 
 	var first screen
@@ -383,3 +409,47 @@ func Run() error {
 // saveCfg writes the in-memory config to config.yaml. Screens call it after every
 // change so edits are persisted immediately.
 func saveCfg(a *app) error { return config.Save(a.cfg) }
+
+// checkUpdateCmd asks (in the background) whether a newer release exists and
+// reports back with an updateMsg. maxAge is how old a cached answer may be; the
+// manual flag marks a check the user asked for.
+func (a *app) checkUpdateCmd(maxAge time.Duration, manual bool) tea.Cmd {
+	build := a.build
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+		defer cancel()
+		return updateMsg{res: version.Check(ctx, build, maxAge), manual: manual}
+	}
+}
+
+// versionCmd is the v key: re-check right now (ignoring the cache) and show the
+// answer in the status line.
+func (a *app) versionCmd() tea.Cmd {
+	return busy("Checking for updates…", a.checkUpdateCmd(0, true))
+}
+
+// headerRight renders the right-hand side of the header, in at most max columns:
+// an "update available" notice, this build's version, and the server. Parts are
+// dropped from the left-most (least important) end until it fits.
+func (r *root) headerRight(max int) string {
+	host := strings.TrimPrefix(strings.TrimPrefix(r.a.creds.URL, "https://"), "http://")
+	ver := sMuted.Render(r.a.build.Short())
+
+	var parts []string
+	if r.a.update.Status == version.UpdateAvailable {
+		parts = append(parts, sWarn.Render("↑ "+r.a.update.Latest+" available"))
+	}
+	parts = append(parts, ver)
+	if host != "" {
+		parts = append(parts, sMuted.Render(trunc(host, 30)))
+	}
+
+	// Try everything, then drop the server, then the update notice.
+	for _, cand := range [][]string{parts, parts[:len(parts)-1], parts[len(parts)-2:], {ver}} {
+		s := strings.Join(cand, sMuted.Render("  ·  "))
+		if lipgloss.Width(s) <= max {
+			return s
+		}
+	}
+	return ""
+}

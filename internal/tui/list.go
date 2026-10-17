@@ -31,12 +31,12 @@ func (s *listScreen) Help() string {
 	if s.confirm != nil {
 		return ""
 	}
-	return helpLine("↑↓", "move", "enter", "open", "n", "new", "d", "delete", "s", "sync", "S", "sync all", "C", "crontab", "o", "server", "q", "quit")
+	return helpLine("↑↓", "move", "enter", "open", "n", "new", "d", "delete", "s", "sync", "S", "sync all", "C", "crontab", "o", "server", "v", "version", "q", "quit")
 }
 
 // Update handles keys on the playlist list: navigation, opening, creating and
 // deleting playlists, syncing one or all, reinstalling the crontab, opening the
-// server settings and quitting.
+// server settings, checking for a new version and quitting.
 func (s *listScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	k, ok := msg.(tea.KeyMsg)
 	if !ok {
@@ -90,6 +90,8 @@ func (s *listScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		return s, status("Crontab now matches your schedules")
 	case "o":
 		return s, push(newSetup(s.a, false))
+	case "v":
+		return s, s.a.versionCmd()
 	case "q":
 		return s, tea.Quit
 	}

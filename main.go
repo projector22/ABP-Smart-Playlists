@@ -14,8 +14,12 @@ import (
 	"github.com/projector22/abp/internal/cron"
 	"github.com/projector22/abp/internal/engine"
 	"github.com/projector22/abp/internal/tui"
+	ver "github.com/projector22/abp/internal/version"
 )
 
+// version is stamped in at build time by the Makefile / release workflow with
+// -ldflags "-X main.version=<tag>". Builds made with plain `go install` leave it
+// as "dev"; internal/version then falls back to the module version Go embeds.
 var version = "dev"
 
 const usage = `abp - smart playlists for Audiobookshelf podcasts
@@ -27,7 +31,7 @@ Usage:
   abp cron install            write schedules from config.yaml into your crontab
   abp cron remove             remove all abp entries from your crontab
   abp cron show               show abp entries currently in your crontab
-  abp version
+  abp -v | version            show the version and whether an update is available
 
 Flags for sync:
   -n, -dry-run   show what would change without touching Audiobookshelf
@@ -36,6 +40,7 @@ Flags for sync:
 Config:       ` + "%s" + `
 Credentials:  ` + "%s" + ` (private, mode 0600)
 Env overrides: ABP_URL, ABP_API_KEY, ABP_CONFIG, ABP_DATA_DIR
+Set ABP_NO_UPDATE_CHECK=1 to stop abp contacting GitHub to look for new releases.
 `
 
 // main dispatches to the TUI (no arguments) or to one of the command-line
@@ -43,7 +48,7 @@ Env overrides: ABP_URL, ABP_API_KEY, ABP_CONFIG, ABP_DATA_DIR
 func main() {
 	args := os.Args[1:]
 	if len(args) == 0 {
-		if err := tui.Run(); err != nil {
+		if err := tui.Run(ver.Detect(version)); err != nil {
 			fatal(err)
 		}
 		return
@@ -55,8 +60,8 @@ func main() {
 		cmdList()
 	case "cron":
 		cmdCron(args[1:])
-	case "version", "-v", "--version":
-		fmt.Println("abp", version)
+	case "version", "-v", "-version", "--version":
+		cmdVersion()
 	case "help", "-h", "--help":
 		fmt.Printf(usage, config.Path(), config.CredentialsPath())
 	default:
@@ -207,5 +212,21 @@ func cmdCron(args []string) {
 		}
 	default:
 		fatal(fmt.Errorf("unknown cron command %q", args[0]))
+	}
+}
+
+// cmdVersion implements "abp -v": it prints this build's version and then asks
+// GitHub whether a newer release exists, telling the user if they are up to
+// date, can update, or are running a development build ahead of any release. A
+// failed check is reported but never makes the command fail, so the version can
+// always be read offline.
+func cmdVersion() {
+	b := ver.Detect(version)
+	fmt.Println("abp", b.Long())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for _, line := range ver.Check(ctx, b, 0).Lines() {
+		fmt.Println(line)
 	}
 }
