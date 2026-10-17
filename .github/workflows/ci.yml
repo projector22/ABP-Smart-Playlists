@@ -1,0 +1,50 @@
+# Runs on every push and pull request: formatting, vet, module hygiene,
+# tests (with the race detector) on Linux and macOS, and a build.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel a superseded run when new commits arrive on the same branch/PR.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod # one source of truth for the Go version
+          cache: true # caches modules and build output, keyed on go.sum
+
+      - name: Formatting (gofmt)
+        run: make fmt-check
+
+      - name: Vet
+        run: make vet
+
+      - name: Go modules are tidy
+        # Fails if go.mod / go.sum are out of date, i.e. someone forgot `make tidy`.
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Test (race detector)
+        run: make test-race
+
+      - name: Build
+        run: make build

@@ -1,0 +1,58 @@
+# Runs when a version tag such as v0.1.0 is pushed: re-runs the tests, builds
+# binaries for linux/darwin (amd64 + arm64) and publishes a GitHub Release with
+# the tarballs, a checksums file and auto-generated release notes.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: make fmt-check vet test-race
+
+  release:
+    name: Build and publish
+    needs: test # nothing is published unless the tests pass
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to create the release and upload assets
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so release notes can see previous tags
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Cross-compile
+        # The tag name (e.g. v0.1.0) becomes the version reported by `abp version`.
+        run: make dist VERSION="${GITHUB_REF_NAME}"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Tags like v0.2.0-rc1 are published as pre-releases.
+          flags=""
+          if [[ "$TAG" == *-* ]]; then flags="--prerelease"; fi
+          gh release create "$TAG" dist/*.tar.gz dist/checksums.txt \
+            --title "$TAG" --generate-notes --verify-tag $flags

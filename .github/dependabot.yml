@@ -1,0 +1,11 @@
+# Opens pull requests to keep Go modules and the Actions used above up to date.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
