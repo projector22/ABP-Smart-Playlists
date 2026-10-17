@@ -116,13 +116,37 @@ type State struct {
 // from the server.
 func LoadState() *State {
 	s := &State{Playlists: map[string]*PlaylistState{}}
-	if b, err := os.ReadFile(StatePath()); err == nil {
-		_ = json.Unmarshal(b, s)
-	}
-	if s.Playlists == nil {
-		s.Playlists = map[string]*PlaylistState{}
-	}
+	s.load()
 	return s
+}
+
+// load replaces the in-memory state with what is currently on disk. A missing
+// or unreadable file leaves the in-memory state untouched. The caller must hold
+// s.mu (or own s exclusively, as LoadState does).
+//
+// Several abp processes share this file: the TUI, and a separate short-lived
+// "abp sync" for every cron run. Writes are atomic (temp file + rename) so a
+// reader never sees half a file.
+func (s *State) load() {
+	b, err := os.ReadFile(StatePath())
+	if err != nil {
+		return
+	}
+	var disk struct {
+		Playlists map[string]*PlaylistState `json:"playlists"`
+	}
+	if json.Unmarshal(b, &disk) != nil || disk.Playlists == nil {
+		return
+	}
+	s.Playlists = disk.Playlists
+}
+
+// Reload re-reads the state file so changes made by other abp processes (most
+// importantly cron runs) become visible to a long-running TUI.
+func (s *State) Reload() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
 }
 
 // Get returns a copy of the stored state for one playlist (zero value if none).
@@ -137,9 +161,14 @@ func (s *State) Get(id string) PlaylistState {
 }
 
 // Update mutates the state for one playlist and persists it.
+//
+// It re-reads the file first, so the change is applied on top of whatever other
+// processes have written since this State was loaded. Without that, a manual
+// sync in the TUI would overwrite a scheduled run that cron had just recorded.
 func (s *State) Update(id string, fn func(*PlaylistState)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.load()
 	p := s.Playlists[id]
 	if p == nil {
 		p = &PlaylistState{}
@@ -154,6 +183,7 @@ func (s *State) Update(id string, fn func(*PlaylistState)) {
 func (s *State) Forget(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.load()
 	delete(s.Playlists, id)
 	_ = writePrivate(StatePath(), s)
 }
