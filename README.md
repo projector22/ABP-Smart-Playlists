@@ -40,6 +40,7 @@ From then on abp keeps the same playlist up to date for you. Add a schedule (pre
 - **Playlist list:** `enter` open · `n` new · `d` delete · `s` sync · `S` sync all · `C` re-install crontab · `o` server settings · `q` quit
 - **A playlist:** `a` add or remove podcasts · `x` remove the highlighted podcast · `e` edit · `c` schedule · `p` preview · `s` sync · `D` delete · `esc` back
 - **Podcast picker:** type to filter · `tab`/`enter` toggle a podcast · `esc` done
+- **Playlist list:** `enter` open · `n` new · `d` delete · `s` sync · `S` sync all · `C` re-install crontab · `o` server settings · `v` check for updates · `q` quit
 
 ## Running on a schedule
 
@@ -56,6 +57,21 @@ You can also drive it from the command line:
     abp cron show                  # show what's installed
 
 Output from scheduled runs is appended to `~/.local/share/abp/abp.log`.
+
+## Version and updates
+
+    abp -v
+
+shows which version you're running and whether there is a newer release:
+
+- **A tagged release** (e.g. `v0.1.4`): tells you if you're up to date, or if an update is available and how to get it.
+- **A development build** (built from source with extra commits, or installed from an untagged commit): reported as a development build, and as ahead of the latest release if it is.
+
+The same information is in the TUI: the version is shown at the top right, with an `↑ v0.1.5 available` notice when there is an update, and pressing `v` on the playlist list checks again straight away.
+
+To update, run `go install github.com/projector22/abp@latest` again, or download the new release from the [releases page](https://github.com/projector22/abp/releases).
+
+abp looks for new releases by asking github.com for the latest release page. It asks at most once a day from the TUI, remembers the answer, and sends nothing but a request for that public page. To turn it off completely, set `ABP_NO_UPDATE_CHECK=1`.
 
 ## Configuration
 
