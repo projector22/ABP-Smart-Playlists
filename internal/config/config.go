@@ -92,7 +92,11 @@ func Save(c *Config) error {
 	if err := enc.Encode(c); err != nil {
 		return err
 	}
-	_ = enc.Close()
+	// Close flushes the encoder; if it fails the YAML may be incomplete, so never
+	// write it out.
+	if err := enc.Close(); err != nil {
+		return err
+	}
 
 	path := Path()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

@@ -101,7 +101,7 @@ func (f *fakeABS) handler() http.Handler {
 				prog = append(prog, map[string]any{"libraryItemId": p[0], "episodeId": p[1], "isFinished": true})
 			}
 		}
-		json.NewEncoder(w).Encode(map[string]any{"username": "t", "mediaProgress": prog})
+		_ = json.NewEncoder(w).Encode(map[string]any{"username": "t", "mediaProgress": prog})
 	})
 	mux.HandleFunc("/api/items/", func(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimPrefix(r.URL.Path, "/api/items/")
@@ -110,7 +110,7 @@ func (f *fakeABS) handler() http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]any{"id": id, "media": map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": id, "media": map[string]any{
 			"metadata": map[string]any{"title": "Pod " + id}, "episodes": eps}})
 	})
 	mux.HandleFunc("/api/playlists", func(w http.ResponseWriter, r *http.Request) {
@@ -123,21 +123,21 @@ func (f *fakeABS) handler() http.Handler {
 				Description string             `json:"description"`
 				Items       []abp.PlaylistItem `json:"items"`
 			}
-			json.NewDecoder(r.Body).Decode(&b)
+			_ = json.NewDecoder(r.Body).Decode(&b)
 			f.pl = &fplaylist{id: "pl1", lib: b.LibraryID, name: b.Name, desc: b.Description}
 			for i, it := range b.Items {
 				f.pl.items = append(f.pl.items, fitem{it, i + 1})
 			}
 			f.creates++
 			f.writes++
-			json.NewEncoder(w).Encode(f.pl.json(false, true))
+			_ = json.NewEncoder(w).Encode(f.pl.json(false, true))
 			return
 		}
 		out := []abp.Playlist{}
 		if f.pl != nil {
 			out = append(out, f.pl.json(false, false)) // list endpoint: no items
 		}
-		json.NewEncoder(w).Encode(map[string]any{"playlists": out})
+		_ = json.NewEncoder(w).Encode(map[string]any{"playlists": out})
 	})
 	mux.HandleFunc("/api/playlists/", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -153,7 +153,7 @@ func (f *fakeABS) handler() http.Handler {
 			Description string             `json:"description"`
 			Items       []abp.PlaylistItem `json:"items"`
 		}
-		json.NewDecoder(r.Body).Decode(&body)
+		_ = json.NewDecoder(r.Body).Decode(&body)
 		p := f.pl
 		switch {
 		case r.Method == "PATCH":
@@ -210,11 +210,11 @@ func (f *fakeABS) handler() http.Handler {
 			p.items = left
 			if len(left) == 0 {
 				f.pl = nil
-				w.Write([]byte("{}"))
+				_, _ = w.Write([]byte("{}"))
 				return
 			}
 		}
-		json.NewEncoder(w).Encode(p.json(f.reverse && r.Method == "GET", true))
+		_ = json.NewEncoder(w).Encode(p.json(f.reverse && r.Method == "GET", true))
 	})
 	return mux
 }
@@ -385,7 +385,7 @@ func TestRunDetectsServerNotApplyingChanges(t *testing.T) {
 	inner := f.handler()
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" && strings.HasPrefix(r.URL.Path, "/api/playlists/") {
-			w.Write([]byte("{}")) // 200 OK but does nothing
+			_, _ = w.Write([]byte("{}")) // 200 OK but does nothing
 			return
 		}
 		inner.ServeHTTP(w, r)

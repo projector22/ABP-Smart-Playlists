@@ -80,7 +80,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // read-only body: a close error is not actionable
 
 	// Map HTTP failures to useful errors before touching the body.
 	switch {

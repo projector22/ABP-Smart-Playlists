@@ -265,7 +265,7 @@ func fetchLatest(ctx context.Context, b Build) (tag, url string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // read-only body: a close error is not actionable
 
 	switch {
 	case resp.StatusCode >= 300 && resp.StatusCode < 400:
